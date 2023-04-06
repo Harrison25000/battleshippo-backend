@@ -35,8 +35,8 @@ app.post('/creategame', (req, res) => {
     let date = moment();
 
     obj = {}; //crete object
-    obj.gameInfo = { url: urlFileName, missilesPerTurn, connectedPlayers: 1, numberOfPlayers };
-    obj[`${playerName}`] = { name: playerName };
+    obj.gameInfo = { url: urlFileName, missilesPerTurn, connectedPlayers: 1, numberOfPlayers, playersTurnEndedCount: 0, turnCount: 0 };
+    obj[`${playerName}`] = { name: playerName, turnEnded: false };
     json = JSON.stringify(obj); //convert it to json
 
     fs.writeFile(`${urlFileName}.json`, json, 'utf8', function readFileCallback(error, data2) {
@@ -60,12 +60,13 @@ app.post('/connecttogame', (req, res) => {
         } else {
             const obj = JSON.parse(data);
             obj.gameInfo.connectedPlayers = obj.gameInfo.connectedPlayers + 1;
-            obj[`${playerName}`] = { name: playerName };
+            obj[`${playerName}`] = { name: playerName, turnEnded: false };
             const map = obj.gameInfo.map;
             json = JSON.stringify(obj); //convert it back to json
             fs.writeFile(`${urlFileName}.json`, json, 'utf8', function readFileCallback(error, data2) {
                 if (error) {
                     console.log(error);
+                    res.send({ status: "error", message: "failed to connect to game - cannot write to file" });
                 } else {
                     res.send({ map, status: "ok", message: "connected to game" });
                 }
@@ -89,6 +90,7 @@ app.post('/savemap', (req, res) => {
             fs.writeFile(`${urlFileName}.json`, json, 'utf8', function readFileCallback(error, data2) {
                 if (error) {
                     console.log(error);
+                    res.send({ status: "error", message: "failed to write file to save map" });
                 } else {
                     res.send({ status: "ok", message: "map saved" });
                 }
@@ -98,6 +100,71 @@ app.post('/savemap', (req, res) => {
 });
 
 
-app.get('/endturn', (req, res) => { })
+app.get('/endturn', (req, res) => {
+    const urlFileName = req.body.post.url;
+    const playerName = req.body.post.playerName;
+    const shipCoordinates = req.body.post.shipCoordinates;
+    const missileCoordinates = req.body.post.missileCoordinates;
+    const map = req.body.post.map;
+    const turnCount = req.body.post.turnCount;
+
+
+    fs.readFile(`${urlFileName}.json`, 'utf8', function readFileCallback(err, data) {
+        if (err) {
+            console.log(err);
+            res.send({ status: "error", message: "failed to read file for turn end" });
+        } else {
+            obj = JSON.parse(data); //now it an object
+            obj[`${playerName}`].turnEnded = true; //add some data
+            obj[`${playerName}`].shipCoordinates = shipCoordinates; //add some data
+            obj.gameInfo.map = map;
+            if (obj.gameInfo.turnCount === turnCount) {
+                obj.gameInfo.turnMissileCoordinates.push(missileCoordinates)
+            } else {
+                obj.gameInfo.turnMissileCoordinates = [];
+            }
+            obj.gameInfo.turnCount = turnCount;
+            obj.gameInfo.playersTurnEndedCount = obj.gameInfo.playersTurnEndedCount + 1;
+
+
+            json = JSON.stringify(obj); //convert it back to json
+            fs.writeFile(`${urlFileName}.json`, json, 'utf8', function readFileCallback(error, data2) {
+                if (error) {
+                    console.log(error);
+                    res.send({ status: "error", message: "failed to write file for turn end" });
+                } else {
+                    res.send({ status: "ok", message: "turn ended" });
+                }
+            }); // write it back 
+        }
+    });
+})
+
+app.get('/pollendturn', (req, res) => {
+    fs.readFile(`${urlFileName}.json`, 'utf8', function readFileCallback(err, data) {
+        if (err) {
+            console.log(err);
+            res.send({ status: "error", message: "failed to read file for poll turn end" });
+        } else {
+            obj = JSON.parse(data); //now it an object
+            obj[`${playerName}`].turnEnded = true; //add some data
+            obj[`${playerName}`].shipCoordinates = shipCoordinates; //add some data
+            obj.gameInfo.map;
+            if (obj.gameInfo.turnCount === turnCount) {
+                obj.gameInfo.turnMissileCoordinates.push(missileCoordinates)
+            } else {
+                obj.gameInfo.turnMissileCoordinates = [];
+            }
+            obj.gameInfo.turnCount = turnCount;
+            obj.gameInfo.playersTurnEndedCount = obj.gameInfo.playersTurnEndedCount + 1;
+
+            var allPlayersEndedTurn = false;
+            if (obj.gameInfo.playersTurnEndedCount === obj.gameInfo.numberOfPlayers) {
+                allPlayersEndedTurn = true;
+            }
+            return ({ allPlayersEndedTurn, map: obj.gameInfo.map, missileCoordinates: obj.gameInfo.turnMissileCoordinates })
+        }
+    });
+});
 
 app.listen(port, () => console.log(`Listening on port ${port}`));
